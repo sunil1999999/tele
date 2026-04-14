@@ -1,16 +1,21 @@
 import os
 import threading
-from flask import Flask
-
+import logging
 import requests
 import re
 from bs4 import BeautifulSoup
+from flask import Flask
 
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ApplicationBuilder, CommandHandler, CallbackQueryHandler, MessageHandler, filters, ContextTypes
 
 # =========================
-# 🌐 KEEP ALIVE SERVER
+# 🔥 LOGGING
+# =========================
+logging.basicConfig(level=logging.INFO)
+
+# =========================
+# 🌐 FLASK SERVER (RENDER FIX)
 # =========================
 app_web = Flask(__name__)
 
@@ -102,17 +107,23 @@ def get_final_link(url):
 
     for a in soup.find_all("a"):
         href = a.get("href")
-        if href and ("drive" in href or "google" in href):
+        if href and ("drive.google" in href or "google" in href):
             return href
 
     return None
 
 # =========================
-# 🤖 BOT
+# 🤖 COMMANDS
 # =========================
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("🎬 Send movie name")
 
+async def test(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("✅ Bot is working!")
+
+# =========================
+# 🎬 SEARCH HANDLER
+# =========================
 async def handle(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     text = update.message.text
@@ -123,8 +134,11 @@ async def handle(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [[InlineKeyboardButton(r[0], callback_data=f"m_{i}")]
                 for i, r in enumerate(results)]
 
-    await update.message.reply_text("🎬 Select:", reply_markup=InlineKeyboardMarkup(keyboard))
+    await update.message.reply_text("🎬 Select Movie:", reply_markup=InlineKeyboardMarkup(keyboard))
 
+# =========================
+# 🔘 BUTTON HANDLER
+# =========================
 async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -132,51 +146,56 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = query.from_user.id
     data = query.data
 
+    # 🎬 MOVIE SELECT
     if data.startswith("m_"):
         movie = user_data[user_id]["results"][int(data.split("_")[1])]
 
         links = extract_links(movie[1])
         user_data[user_id]["links"] = links
 
-        keyboard = [[InlineKeyboardButton(l["title"], callback_data=f"q_{i}")]
-                    for i, l in enumerate(links)]
+        keyboard = [[InlineKeyboardButton(
+            f"🎞 {l['quality']} • 📦 {l['size']}",
+            callback_data=f"q_{i}"
+        )] for i, l in enumerate(links)]
 
         await query.edit_message_text("📥 Select Quality:", reply_markup=InlineKeyboardMarkup(keyboard))
 
+    # 📥 QUALITY SELECT
     elif data.startswith("q_"):
         selected = user_data[user_id]["links"][int(data.split("_")[1])]
         user_data[user_id]["link"] = selected["link"]
 
         await query.edit_message_text(
-            f"🎬 {selected['title']}\n🎞 {selected['quality']}\n📦 {selected['size']}"
+            f"🎬 {selected['title']}\n"
+            f"━━━━━━━━━━━━\n"
+            f"🎞 {selected['quality']}\n"
+            f"📦 {selected['size']}"
         )
 
-    elif data:
-        link = user_data[user_id]["link"]
-
-        await query.message.reply_text("⏳ Processing...")
-
-        final = get_final_link(link)
+        # 🔗 Fetch final link
+        final = get_final_link(selected["link"])
 
         if final:
-            await query.message.reply_text(f"🔗 {final}")
+            await query.message.reply_text(f"🔗 Download Link:\n{final}")
         else:
-            await query.message.reply_text("❌ Failed")
+            await query.message.reply_text("❌ Link not found")
 
 # =========================
 # 🚀 RUN BOTH
 # =========================
 if __name__ == "__main__":
-    print("🚀 Starting bot + web server...")
+    print("🚀 Starting bot + server...")
 
-    # run flask in background
+    # run flask
     threading.Thread(target=run_web).start()
 
-    # run bot
+    # telegram bot
     app = ApplicationBuilder().token(TOKEN).build()
 
     app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("test", test))
     app.add_handler(MessageHandler(filters.TEXT, handle))
     app.add_handler(CallbackQueryHandler(button))
 
-    app.run_polling()
+    print("🚀 BOT RUNNING...")
+    app.run_polling(drop_pending_updates=True)
