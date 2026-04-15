@@ -172,31 +172,27 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await query.message.reply_text("❌ Link not found")
 
 # =========================
-# 🌐 WEBHOOK ROUTE (FINAL FIX)
+# 🌐 WEBHOOK ROUTE
 # =========================
 @app_web.route(f"/{TOKEN}", methods=["POST"])
 def telegram_webhook():
     update = Update.de_json(request.get_json(force=True), bot_app.bot)
-
-    # ✅ CORRECT WAY (NO asyncio.run)
     bot_app.create_task(bot_app.process_update(update))
-
     return "ok"
 
 # =========================
-# 🚀 START BOT FUNCTION
+# 🚀 START BOT + SERVER
 # =========================
-def start_bot():
+if __name__ == "__main__":
+
+    bot_app = ApplicationBuilder().token(TOKEN).build()
+
+    bot_app.add_handler(CommandHandler("start", start))
+    bot_app.add_handler(CommandHandler("test", test))
+    bot_app.add_handler(MessageHandler(filters.TEXT, handle))
+    bot_app.add_handler(CallbackQueryHandler(button))
+
     async def main():
-        global bot_app
-
-        bot_app = ApplicationBuilder().token(TOKEN).build()
-
-        bot_app.add_handler(CommandHandler("start", start))
-        bot_app.add_handler(CommandHandler("test", test))
-        bot_app.add_handler(MessageHandler(filters.TEXT, handle))
-        bot_app.add_handler(CallbackQueryHandler(button))
-
         await bot_app.initialize()
         await bot_app.start()
 
@@ -205,17 +201,16 @@ def start_bot():
 
         await bot_app.bot.set_webhook(f"{WEBHOOK_URL}/{TOKEN}")
 
-    asyncio.run(main())
+        while True:
+            await asyncio.sleep(3600)
 
-# =========================
-# 🚀 MAIN START
-# =========================
-if __name__ == "__main__":
+    def run_bot():
+        asyncio.run(main())
 
-    # start bot in background
-    threading.Thread(target=start_bot).start()
+    # run bot in background
+    threading.Thread(target=run_bot).start()
 
-    # start flask server
+    # run flask
     port = int(os.environ.get("PORT", 10000))
     print("PORT:", port)
 
