@@ -2,42 +2,24 @@ import os
 import logging
 import requests
 import re
-import threading
-import asyncio
 from bs4 import BeautifulSoup
 from flask import Flask, request
 
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import ApplicationBuilder, CommandHandler, CallbackQueryHandler, MessageHandler, filters, ContextTypes
+from telegram.ext import Application, CommandHandler, CallbackQueryHandler, MessageHandler, filters, ContextTypes
 
-# =========================
-# 🔥 LOGGING
 # =========================
 logging.basicConfig(level=logging.INFO)
 
-# =========================
-# 🌐 FLASK SERVER
-# =========================
-app_web = Flask(__name__)
-
-@app_web.route("/")
-def home():
-    return "Bot is running ✅"
-
-# =========================
-# 🔑 TOKEN
-# =========================
 TOKEN = os.getenv("BOT_TOKEN")
+WEBHOOK_URL = os.getenv("WEBHOOK_URL")
 
-if not TOKEN:
-    raise ValueError("❌ BOT_TOKEN not found")
-
-HEADERS = {"User-Agent": "Mozilla/5.0"}
+app = Flask(__name__)
 user_data = {}
+HEADERS = {"User-Agent": "Mozilla/5.0"}
 
 # =========================
 # 🔍 SEARCH
-# =========================
 def search_movie(name):
     url = f"https://bollyflix.frl/?s={name.replace(' ', '+')}"
     r = requests.get(url, headers=HEADERS)
@@ -46,55 +28,40 @@ def search_movie(name):
 
 # =========================
 # 📥 EXTRACT LINKS
-# =========================
 def extract_links(url):
     r = requests.get(url, headers=HEADERS)
     soup = BeautifulSoup(r.text, "html.parser")
 
     data = []
-
     for h in soup.find_all(["h4", "h5"]):
         text = h.get_text(" ", strip=True)
 
-        if not any(x in text.lower() for x in ["480", "720", "1080", "4k"]):
+        if not any(x in text.lower() for x in ["480","720","1080","4k"]):
             continue
 
-        if "4k" in text.lower():
-            q = "4K"
-        elif "1080" in text:
-            q = "1080p"
-        elif "720" in text:
-            q = "720p"
-        elif "480" in text:
-            q = "480p"
-        else:
-            q = "Unknown"
+        q = "4K" if "4k" in text.lower() else \
+            "1080p" if "1080" in text else \
+            "720p" if "720" in text else \
+            "480p" if "480" in text else "Unknown"
 
         size_match = re.search(r'(\d+(?:\.\d+)?\s?(gb|mb))', text.lower())
         size = size_match.group(1) if size_match else "Unknown"
 
         p = h.find_next("p")
-        if not p:
-            continue
+        if not p: continue
 
         a = p.find("a")
-        if not a:
-            continue
+        if not a: continue
 
-        href = a.get("href")
-
-        if href:
-            data.append({
-                "title": text,
-                "quality": q,
-                "size": size,
-                "link": href
-            })
+        data.append({
+            "title": text,
+            "quality": q,
+            "size": size,
+            "link": a.get("href")
+        })
 
     return data
 
-# =========================
-# 🔥 FINAL LINK
 # =========================
 def get_final_link(url):
     r = requests.get(url, headers=HEADERS)
@@ -102,23 +69,15 @@ def get_final_link(url):
 
     for a in soup.find_all("a"):
         href = a.get("href")
-        if href and ("drive.google" in href or "google" in href):
+        if href and "google" in href:
             return href
-
     return None
 
 # =========================
-# 🤖 COMMANDS
-# =========================
+# 🤖 HANDLERS
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("🎬 Send movie name")
 
-async def test(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("✅ Bot is working!")
-
-# =========================
-# 🎬 SEARCH HANDLER
-# =========================
 async def handle(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     text = update.message.text
@@ -131,9 +90,6 @@ async def handle(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await update.message.reply_text("🎬 Select Movie:", reply_markup=InlineKeyboardMarkup(keyboard))
 
-# =========================
-# 🔘 BUTTON HANDLER
-# =========================
 async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -143,75 +99,55 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if data.startswith("m_"):
         movie = user_data[user_id]["results"][int(data.split("_")[1])]
-
         links = extract_links(movie[1])
         user_data[user_id]["links"] = links
 
-        keyboard = [[InlineKeyboardButton(
-            f"🎞 {l['quality']} • 📦 {l['size']}",
-            callback_data=f"q_{i}"
-        )] for i, l in enumerate(links)]
+        keyboard = [[InlineKeyboardButton(f"{l['quality']} • {l['size']}", callback_data=f"q_{i}")]
+                    for i, l in enumerate(links)]
 
-        await query.edit_message_text("📥 Select Quality:", reply_markup=InlineKeyboardMarkup(keyboard))
+        await query.edit_message_text("Select Quality:", reply_markup=InlineKeyboardMarkup(keyboard))
 
     elif data.startswith("q_"):
         selected = user_data[user_id]["links"][int(data.split("_")[1])]
-
-        await query.edit_message_text(
-            f"🎬 {selected['title']}\n"
-            f"━━━━━━━━━━━━\n"
-            f"🎞 {selected['quality']}\n"
-            f"📦 {selected['size']}"
-        )
-
         final = get_final_link(selected["link"])
 
         if final:
-            await query.message.reply_text(f"🔗 Download Link:\n{final}")
+            await query.message.reply_text(f"🔗 {final}")
         else:
-            await query.message.reply_text("❌ Link not found")
+            await query.message.reply_text("❌ Not found")
+
+# =========================
+# 🚀 TELEGRAM APP
+application = Application.builder().token(TOKEN).build()
+
+application.add_handler(CommandHandler("start", start))
+application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle))
+application.add_handler(CallbackQueryHandler(button))
 
 # =========================
 # 🌐 WEBHOOK ROUTE
-# =========================
-@app_web.route(f"/{TOKEN}", methods=["POST"])
-def telegram_webhook():
-    update = Update.de_json(request.get_json(force=True), bot_app.bot)
-    bot_app.create_task(bot_app.process_update(update))
+@app.route(f"/{TOKEN}", methods=["POST"])
+async def webhook():
+    data = request.get_json(force=True)
+    update = Update.de_json(data, application.bot)
+    await application.process_update(update)
     return "ok"
 
+@app.route("/")
+def home():
+    return "Bot running ✅"
+
 # =========================
-# 🚀 START BOT + SERVER
-# =========================
+# 🚀 START
 if __name__ == "__main__":
-
-    bot_app = ApplicationBuilder().token(TOKEN).build()
-
-    bot_app.add_handler(CommandHandler("start", start))
-    bot_app.add_handler(CommandHandler("test", test))
-    bot_app.add_handler(MessageHandler(filters.TEXT, handle))
-    bot_app.add_handler(CallbackQueryHandler(button))
+    import asyncio
 
     async def main():
-        await bot_app.initialize()
-        await bot_app.start()
+        await application.initialize()
+        await application.start()
+        await application.bot.set_webhook(f"{WEBHOOK_URL}/{TOKEN}")
 
-        WEBHOOK_URL = os.getenv("WEBHOOK_URL")
-        print("WEBHOOK:", WEBHOOK_URL)
+    asyncio.run(main())
 
-        await bot_app.bot.set_webhook(f"{WEBHOOK_URL}/{TOKEN}")
-
-        while True:
-            await asyncio.sleep(3600)
-
-    def run_bot():
-        asyncio.run(main())
-
-    # run bot in background
-    threading.Thread(target=run_bot).start()
-
-    # run flask
     port = int(os.environ.get("PORT", 10000))
-    print("PORT:", port)
-
-    app_web.run(host="0.0.0.0", port=port)
+    app.run(host="0.0.0.0", port=port)
