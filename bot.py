@@ -1,5 +1,7 @@
 import os
 import logging
+import threading
+import asyncio
 from flask import Flask, request
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, ContextTypes
@@ -13,30 +15,25 @@ app = Flask(__name__)
 user_data = {}
 
 # =========================
-# 🎨 BUTTON UI
+# 🎨 UI
 # =========================
 def keyboard():
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton("7️⃣", callback_data="7"), InlineKeyboardButton("8️⃣", callback_data="8"), InlineKeyboardButton("9️⃣", callback_data="9"), InlineKeyboardButton("➗", callback_data="/")],
-        [InlineKeyboardButton("4️⃣", callback_data="4"), InlineKeyboardButton("5️⃣", callback_data="5"), InlineKeyboardButton("6️⃣", callback_data="6"), InlineKeyboardButton("✖️", callback_data="*")],
-        [InlineKeyboardButton("1️⃣", callback_data="1"), InlineKeyboardButton("2️⃣", callback_data="2"), InlineKeyboardButton("3️⃣", callback_data="3"), InlineKeyboardButton("➖", callback_data="-")],
-        [InlineKeyboardButton("0️⃣", callback_data="0"), InlineKeyboardButton(".", callback_data="."), InlineKeyboardButton("🟰", callback_data="="), InlineKeyboardButton("➕", callback_data="+")],
-        [InlineKeyboardButton("🔙", callback_data="back"), InlineKeyboardButton("🧹", callback_data="C")]
+        [InlineKeyboardButton("7️⃣","7"), InlineKeyboardButton("8️⃣","8"), InlineKeyboardButton("9️⃣","9"), InlineKeyboardButton("➗","/")],
+        [InlineKeyboardButton("4️⃣","4"), InlineKeyboardButton("5️⃣","5"), InlineKeyboardButton("6️⃣","6"), InlineKeyboardButton("✖️","*")],
+        [InlineKeyboardButton("1️⃣","1"), InlineKeyboardButton("2️⃣","2"), InlineKeyboardButton("3️⃣","3"), InlineKeyboardButton("➖","-")],
+        [InlineKeyboardButton("0️⃣","0"), InlineKeyboardButton(".", "."), InlineKeyboardButton("🟰","="), InlineKeyboardButton("➕","+")],
+        [InlineKeyboardButton("🔙","back"), InlineKeyboardButton("🧹","C")]
     ])
 
 def display(expr):
     return f"🧮 *Calculator*\n\n`{expr if expr else '0'}`"
 
 # =========================
-# START
-# =========================
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_data[update.effective_user.id] = ""
     await update.message.reply_text(display(""), reply_markup=keyboard(), parse_mode="Markdown")
 
-# =========================
-# BUTTON
-# =========================
 async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -75,7 +72,6 @@ application.add_handler(CallbackQueryHandler(button))
 def webhook():
     update = Update.de_json(request.get_json(force=True), application.bot)
 
-    import asyncio
     asyncio.run(application.process_update(update))
 
     return "ok"
@@ -85,20 +81,29 @@ def home():
     return "Calculator Running ✅"
 
 # =========================
-# START (IMPORTANT FIX)
+# BOT THREAD
 # =========================
-if __name__ == "__main__":
-    import asyncio
-
-    async def setup():
+def run_bot():
+    async def main():
         await application.initialize()
         await application.start()
         await application.bot.set_webhook(f"{WEBHOOK_URL}/{TOKEN}")
 
-    asyncio.run(setup())
+        while True:
+            await asyncio.sleep(3600)
 
+    asyncio.run(main())
+
+# =========================
+# START (FIXED)
+# =========================
+if __name__ == "__main__":
+
+    # ✅ START BOT IN BACKGROUND
+    threading.Thread(target=run_bot).start()
+
+    # ✅ START FLASK FIRST (CRITICAL)
     port = int(os.environ.get("PORT", 10000))
     print("PORT:", port)
 
-    # ✅ THIS LINE FIXES YOUR ERROR
     app.run(host="0.0.0.0", port=port)
