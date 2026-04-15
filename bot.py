@@ -1,6 +1,5 @@
 import os
 import logging
-import threading
 import asyncio
 from flask import Flask, request
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
@@ -15,7 +14,7 @@ app = Flask(__name__)
 user_data = {}
 
 # =========================
-# 🎨 UI
+# UI
 # =========================
 def keyboard():
     return InlineKeyboardMarkup([
@@ -29,6 +28,8 @@ def keyboard():
 def display(expr):
     return f"🧮 *Calculator*\n\n`{expr if expr else '0'}`"
 
+# =========================
+# HANDLERS
 # =========================
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_data[update.effective_user.id] = ""
@@ -66,13 +67,20 @@ application.add_handler(CommandHandler("start", start))
 application.add_handler(CallbackQueryHandler(button))
 
 # =========================
-# WEBHOOK
+# EVENT LOOP FIX
+# =========================
+loop = asyncio.new_event_loop()
+asyncio.set_event_loop(loop)
+
+# =========================
+# WEBHOOK (FINAL FIX)
 # =========================
 @app.route(f"/{TOKEN}", methods=["POST"])
 def webhook():
     update = Update.de_json(request.get_json(force=True), application.bot)
 
-    asyncio.run(application.process_update(update))
+    # ✅ USE SAME LOOP
+    loop.create_task(application.process_update(update))
 
     return "ok"
 
@@ -81,9 +89,9 @@ def home():
     return "Calculator Running ✅"
 
 # =========================
-# BOT THREAD
+# START BOT
 # =========================
-def run_bot():
+def start_bot():
     async def main():
         await application.initialize()
         await application.start()
@@ -92,17 +100,17 @@ def run_bot():
         while True:
             await asyncio.sleep(3600)
 
-    asyncio.run(main())
+    loop.run_until_complete(main())
 
 # =========================
-# START (FIXED)
+# START
 # =========================
 if __name__ == "__main__":
 
-    # ✅ START BOT IN BACKGROUND
-    threading.Thread(target=run_bot).start()
+    import threading
 
-    # ✅ START FLASK FIRST (CRITICAL)
+    threading.Thread(target=start_bot).start()
+
     port = int(os.environ.get("PORT", 10000))
     print("PORT:", port)
 
