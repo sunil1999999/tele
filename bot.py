@@ -40,7 +40,6 @@ def search_movie(name):
     url = f"https://bollyflix.frl/?s={name.replace(' ', '+')}"
     r = requests.get(url, headers=HEADERS)
     soup = BeautifulSoup(r.text, "html.parser")
-
     return [(a.text.strip(), a.get("href")) for a in soup.select("h2 a")][:10]
 
 # =========================
@@ -180,7 +179,7 @@ def telegram_webhook():
     return "ok"
 
 # =========================
-# 🚀 START WEBHOOK BOT
+# 🚀 START
 # =========================
 if __name__ == "__main__":
     import asyncio
@@ -197,9 +196,14 @@ if __name__ == "__main__":
         await bot_app.start()
 
         WEBHOOK_URL = os.getenv("WEBHOOK_URL")
+        print("WEBHOOK:", WEBHOOK_URL)
+
         await bot_app.bot.set_webhook(f"{WEBHOOK_URL}/{TOKEN}")
 
     asyncio.run(main())
 
-    print("🚀 Webhook bot running...")
-    app_web.run(host="0.0.0.0", port=int(os.environ.get("PORT", 10000)))
+    # ✅ IMPORTANT FIX (PORT)
+    port = int(os.environ.get("PORT", 10000))
+    print("PORT:", port)
+
+    app_web.run(host="0.0.0.0", port=port)
