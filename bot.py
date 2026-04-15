@@ -1,5 +1,6 @@
 import os
 import logging
+import threading
 import asyncio
 from flask import Flask, request
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
@@ -14,7 +15,7 @@ app = Flask(__name__)
 user_data = {}
 
 # =========================
-# UI
+# 🎨 UI
 # =========================
 def keyboard():
     return InlineKeyboardMarkup([
@@ -67,19 +68,22 @@ application.add_handler(CommandHandler("start", start))
 application.add_handler(CallbackQueryHandler(button))
 
 # =========================
-# EVENT LOOP FIX
+# GLOBAL LOOP (FIX)
 # =========================
 loop = asyncio.new_event_loop()
 asyncio.set_event_loop(loop)
 
 # =========================
-# WEBHOOK (FINAL FIX)
+# WEBHOOK (DEBUG ENABLED)
 # =========================
 @app.route(f"/{TOKEN}", methods=["POST"])
 def webhook():
-    update = Update.de_json(request.get_json(force=True), application.bot)
+    data = request.get_json(force=True)
 
-    # ✅ USE SAME LOOP
+    print("🔥 UPDATE RECEIVED:", data)  # ✅ DEBUG
+
+    update = Update.de_json(data, application.bot)
+
     loop.create_task(application.process_update(update))
 
     return "ok"
@@ -106,8 +110,6 @@ def start_bot():
 # START
 # =========================
 if __name__ == "__main__":
-
-    import threading
 
     threading.Thread(target=start_bot).start()
 
