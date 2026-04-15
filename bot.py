@@ -3,6 +3,7 @@ import logging
 import requests
 import re
 import threading
+import asyncio
 from bs4 import BeautifulSoup
 from flask import Flask, request
 
@@ -180,19 +181,19 @@ def telegram_webhook():
     return "ok"
 
 # =========================
-# 🚀 START BOT + SERVER
+# 🚀 START BOT FUNCTION
 # =========================
-if __name__ == "__main__":
-    import asyncio
-
-    bot_app = ApplicationBuilder().token(TOKEN).build()
-
-    bot_app.add_handler(CommandHandler("start", start))
-    bot_app.add_handler(CommandHandler("test", test))
-    bot_app.add_handler(MessageHandler(filters.TEXT, handle))
-    bot_app.add_handler(CallbackQueryHandler(button))
-
+def start_bot():
     async def main():
+        global bot_app
+
+        bot_app = ApplicationBuilder().token(TOKEN).build()
+
+        bot_app.add_handler(CommandHandler("start", start))
+        bot_app.add_handler(CommandHandler("test", test))
+        bot_app.add_handler(MessageHandler(filters.TEXT, handle))
+        bot_app.add_handler(CallbackQueryHandler(button))
+
         await bot_app.initialize()
         await bot_app.start()
 
@@ -203,10 +204,16 @@ if __name__ == "__main__":
 
     asyncio.run(main())
 
-    # ✅ FIX: Run Flask separately (IMPORTANT)
-    def run_flask():
-        port = int(os.environ.get("PORT", 10000))
-        print("PORT:", port)
-        app_web.run(host="0.0.0.0", port=port)
+# =========================
+# 🚀 MAIN START
+# =========================
+if __name__ == "__main__":
 
-    threading.Thread(target=run_flask).start()
+    # ✅ START BOT IN BACKGROUND
+    threading.Thread(target=start_bot).start()
+
+    # ✅ START FLASK IMMEDIATELY (IMPORTANT)
+    port = int(os.environ.get("PORT", 10000))
+    print("PORT:", port)
+
+    app_web.run(host="0.0.0.0", port=port)
