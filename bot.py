@@ -172,12 +172,16 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await query.message.reply_text("❌ Link not found")
 
 # =========================
-# 🌐 WEBHOOK ROUTE
+# 🌐 WEBHOOK ROUTE (FIXED)
 # =========================
 @app_web.route(f"/{TOKEN}", methods=["POST"])
 def telegram_webhook():
-    update = Update.de_json(request.get_json(force=True), bot_app.bot)
-    bot_app.update_queue.put_nowait(update)
+    data = request.get_json(force=True)
+    update = Update.de_json(data, bot_app.bot)
+
+    # ✅ DIRECT PROCESS (IMPORTANT FIX)
+    asyncio.run(bot_app.process_update(update))
+
     return "ok"
 
 # =========================
@@ -209,10 +213,10 @@ def start_bot():
 # =========================
 if __name__ == "__main__":
 
-    # ✅ START BOT IN BACKGROUND
+    # start bot in background
     threading.Thread(target=start_bot).start()
 
-    # ✅ START FLASK IMMEDIATELY (IMPORTANT)
+    # start flask
     port = int(os.environ.get("PORT", 10000))
     print("PORT:", port)
 
