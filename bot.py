@@ -1,11 +1,8 @@
 import os
 import logging
-import requests
-import re
-from bs4 import BeautifulSoup
 from flask import Flask, request
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import Application, CommandHandler, CallbackQueryHandler, MessageHandler, filters, ContextTypes
+from telegram import Update
+from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 
 logging.basicConfig(level=logging.INFO)
 
@@ -13,57 +10,39 @@ TOKEN = os.getenv("BOT_TOKEN")
 WEBHOOK_URL = os.getenv("WEBHOOK_URL")
 
 app = Flask(__name__)
-user_data = {}
 
 # =========================
-# SEARCH
-def search_movie(name):
-    url = f"https://bollyflix.frl/?s={name.replace(' ', '+')}"
-    r = requests.get(url)
-    soup = BeautifulSoup(r.text, "html.parser")
-    return [(a.text.strip(), a.get("href")) for a in soup.select("h2 a")][:10]
-
+# 🤖 COMMAND
 # =========================
-# COMMAND
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("🎬 Send movie name")
+    await update.message.reply_text(
+        "🧮 Calculator Bot\n\nSend any math expression:\nExample:\n2+3*5"
+    )
 
 # =========================
-# MESSAGE
-async def handle(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    results = search_movie(update.message.text)
-
-    if not results:
-        await update.message.reply_text("❌ Not found")
-        return
-
-    keyboard = [[InlineKeyboardButton(r[0], callback_data=str(i))]
-                for i, r in enumerate(results)]
-
-    context.user_data["results"] = results
-
-    await update.message.reply_text("Select movie:", reply_markup=InlineKeyboardMarkup(keyboard))
-
+# 🧮 CALCULATOR
 # =========================
-# BUTTON
-async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
+async def calculate(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    expr = update.message.text
 
-    results = context.user_data.get("results", [])
-    index = int(query.data)
-
-    await query.message.reply_text(f"Link:\n{results[index][1]}")
+    try:
+        # ⚠️ safe eval
+        result = eval(expr, {"__builtins__": None}, {})
+        await update.message.reply_text(f"✅ Result: {result}")
+    except:
+        await update.message.reply_text("❌ Invalid expression")
 
 # =========================
 # TELEGRAM APP
+# =========================
 application = Application.builder().token(TOKEN).build()
+
 application.add_handler(CommandHandler("start", start))
-application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle))
-application.add_handler(CallbackQueryHandler(button))
+application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, calculate))
 
 # =========================
 # WEBHOOK
+# =========================
 @app.route(f"/{TOKEN}", methods=["POST"])
 def webhook():
     update = Update.de_json(request.get_json(force=True), application.bot)
@@ -75,10 +54,11 @@ def webhook():
 
 @app.route("/")
 def home():
-    return "Bot running ✅"
+    return "Calculator Bot Running ✅"
 
 # =========================
 # START
+# =========================
 if __name__ == "__main__":
     import asyncio
 
