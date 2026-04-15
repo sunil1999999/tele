@@ -2,6 +2,7 @@ import os
 import logging
 import requests
 import re
+import threading
 from bs4 import BeautifulSoup
 from flask import Flask, request
 
@@ -179,7 +180,7 @@ def telegram_webhook():
     return "ok"
 
 # =========================
-# 🚀 START
+# 🚀 START BOT + SERVER
 # =========================
 if __name__ == "__main__":
     import asyncio
@@ -202,8 +203,10 @@ if __name__ == "__main__":
 
     asyncio.run(main())
 
-    # ✅ IMPORTANT FIX (PORT)
-    port = int(os.environ.get("PORT", 10000))
-    print("PORT:", port)
+    # ✅ FIX: Run Flask separately (IMPORTANT)
+    def run_flask():
+        port = int(os.environ.get("PORT", 10000))
+        print("PORT:", port)
+        app_web.run(host="0.0.0.0", port=port)
 
-    app_web.run(host="0.0.0.0", port=port)
+    threading.Thread(target=run_flask).start()
